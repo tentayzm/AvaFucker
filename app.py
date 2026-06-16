@@ -1,6 +1,7 @@
 import asyncio
 import os
 from aiogram import Bot, Dispatcher, types
+from flask import Flask  # <-- اضافه شد
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
@@ -79,17 +80,33 @@ async def handler(message: types.Message):
         await message.reply("❌ عدد بین ۱ تا ۱۰۰ وارد کنید.")
         return
 
-    # حالت چرخشی (Sequential)
     for i in range(number):
         insult = INSULTS[i % len(INSULTS)]
         await message.reply_to_message.reply(f"{i+1}️⃣ {insult}")
         await asyncio.sleep(0.3)
 
-async def main():
-    print("🤖 ربات با Aiogram روشن شد!")
-    print(f"✅ تعداد کاربران مجاز: {len(AUTHORIZED_USERS)}")
-    print(f"✅ تعداد فحش‌ها: {len(INSULTS)}")
+# ===== بخش Flask برای رندر =====
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return "ربات فحاش فعال است!", 200
+
+async def start_bot():
     await dp.start_polling(bot)
 
+# ===== اجرای همزمان ربات و فلاسک =====
 if __name__ == "__main__":
-    asyncio.run(main())
+    from threading import Thread
+    import time
+
+    # اجرای ربات در یک ترد جداگانه
+    def run_bot():
+        asyncio.run(start_bot())
+
+    t = Thread(target=run_bot)
+    t.start()
+
+    # اجرای فلاسک برای اشغال پورت
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
