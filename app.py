@@ -1,7 +1,7 @@
 import asyncio
 import os
 from aiogram import Bot, Dispatcher, types
-from flask import Flask  # <-- اضافه شد
+from flask import Flask
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
@@ -85,28 +85,26 @@ async def handler(message: types.Message):
         await message.reply_to_message.reply(f"{i+1}️⃣ {insult}")
         await asyncio.sleep(0.3)
 
-# ===== بخش Flask برای رندر =====
+# ===== Flask =====
 app = Flask(__name__)
 
 @app.route('/')
-def index():
-    return "ربات فحاش فعال است!", 200
+@app.route('/health')
+def health():
+    return "ربات فعال است!", 200
 
-async def start_bot():
-    await dp.start_polling(bot)
-
-# ===== اجرای همزمان ربات و فلاسک =====
+# ===== اجرای مستقیم (بدون ترد) =====
 if __name__ == "__main__":
-    from threading import Thread
-    import time
-
-    # اجرای ربات در یک ترد جداگانه
-    def run_bot():
-        asyncio.run(start_bot())
-
-    t = Thread(target=run_bot)
-    t.start()
-
-    # اجرای فلاسک برای اشغال پورت
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    import threading
+    
+    # اجرای فلاسک در ترد جداگانه
+    def run_flask():
+        port = int(os.environ.get("PORT", 5000))
+        app.run(host="0.0.0.0", port=port, use_reloader=False)
+    
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()
+    
+    # اجرای ربات در ترد اصلی (حل مشکل)
+    print("🤖 ربات در حال اجراست...")
+    asyncio.run(dp.start_polling(bot))
