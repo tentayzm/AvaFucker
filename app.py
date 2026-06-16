@@ -1,6 +1,7 @@
 import asyncio
 import os
 from aiogram import Bot, Dispatcher, types
+from aiogram.types import Message
 from flask import Flask
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
@@ -59,7 +60,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 @dp.message()
-async def handler(message: types.Message):
+async def handler(message: Message):
     user_id = message.from_user.id
 
     if user_id not in AUTHORIZED_USERS:
@@ -75,7 +76,7 @@ async def handler(message: types.Message):
         return
 
     number = int(message.text)
-    
+
     if not (1 <= number <= 100):
         await message.reply("❌ عدد بین ۱ تا ۱۰۰ وارد کنید.")
         return
@@ -85,7 +86,6 @@ async def handler(message: types.Message):
         await message.reply_to_message.reply(f"{i+1}️⃣ {insult}")
         await asyncio.sleep(0.3)
 
-# ===== Flask =====
 app = Flask(__name__)
 
 @app.route('/')
@@ -93,18 +93,12 @@ app = Flask(__name__)
 def health():
     return "ربات فعال است!", 200
 
-# ===== اجرای مستقیم (بدون ترد) =====
+async def main():
+    await dp.start_polling(bot)
+
 if __name__ == "__main__":
     import threading
-    
-    # اجرای فلاسک در ترد جداگانه
-    def run_flask():
-        port = int(os.environ.get("PORT", 5000))
-        app.run(host="0.0.0.0", port=port, use_reloader=False)
-    
-    flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
-    
-    # اجرای ربات در ترد اصلی (حل مشکل)
+    port = int(os.environ.get("PORT", 5000))
+    threading.Thread(target=lambda: app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)).start()
     print("🤖 ربات در حال اجراست...")
-    asyncio.run(dp.start_polling(bot))
+    asyncio.run(main())
