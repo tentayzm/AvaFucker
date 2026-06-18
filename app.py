@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message
 from flask import Flask
@@ -12,7 +13,7 @@ AUTHORIZED_USERS = [
     8811402550,
 ]
 
-# ===== لیست فحش‌های سنگین (ردیفی) =====
+# ===== لیست فحش‌های سنگین =====
 INSULTS = [
     "اوا مادرجنده کثافت",
     "اوا خارکونی پدرسگ",
@@ -131,43 +132,53 @@ dp = Dispatcher()
 async def handler(message: Message):
     user_id = message.from_user.id
 
+    # چک کردن دسترسی (فقط سودوها)
     if user_id not in AUTHORIZED_USERS:
         await message.reply("⛔ شما دسترسی به این ربات ندارید!")
         return
 
+    # چک کردن ریپلای
     if not message.reply_to_message:
-        await message.reply("⚠️ روی یک پیام ریپلای بزنید و عدد مورد نظر را بفرستید.")
+        await message.reply("⚠️ روی یک پیام ریپلای بزنید و عبارت 'اوارو بگا {عدد}' را بفرستید.")
         return
 
     if not message.text:
         await message.reply("❌ لطفاً یک عدد وارد کنید.")
         return
 
-    text = convert_persian_to_english(message.text.strip())
+    # ===== بررسی عبارت "اوارو بگا {عدد}" =====
+    text = message.text.strip()
     
-    if not text.isdigit():
-        await message.reply("❌ لطفاً یک عدد وارد کنید.")
+    # الگوی regex برای عبارت "اوارو بگا" + عدد
+    pattern = r'^اوارو بگا\s+(\d+)$'
+    match = re.match(pattern, text)
+    
+    if not match:
+        await message.reply("❌ فرمت درست نیست! باید به این شکل باشه:\nاوارو بگا {عدد}\nمثال: اوارو بگا 5")
         return
-
-    number = int(text)
+    
+    # استخراج عدد از متن
+    number_text = match.group(1)
+    number = int(number_text)
+    
+    # تبدیل عدد فارسی به انگلیسی (اگر عدد فارسی زده باشه)
+    number_text_english = convert_persian_to_english(number_text)
+    number = int(number_text_english)
 
     if not (1 <= number <= 100):
         await message.reply("❌ عدد بین ۱ تا ۱۰۰ وارد کنید.")
         return
 
-    # ===== ارسال به ترتیب (ردیفی) =====
+    # ===== ارسال فحش‌ها =====
     CHUNK_SIZE = 4
     
     for i in range(number):
-        # انتخاب ۴ فحش به ترتیب از لیست
         chunk = []
         for j in range(CHUNK_SIZE):
             index = (i * CHUNK_SIZE + j) % len(INSULTS)
             chunk.append(INSULTS[index])
         
-        # ترکیب به صورت ردیفی (با فاصله)
         insult_text = " ".join(chunk)
-        
         await message.reply_to_message.reply(insult_text)
         await asyncio.sleep(0.5)
 
