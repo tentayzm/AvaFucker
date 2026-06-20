@@ -8,16 +8,29 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BufferedInputFile
 from aiogram.filters import Command
 from flask import Flask
-import edge_tts
+import google.generativeai as genai
+from gtts import gTTS
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
+GOOGLE_API_KEY = os.environ.get('GOOGLE_API_KEY')
 
-# ===== پوشه ذخیره تنظیمات گروه‌ها =====
+if GOOGLE_API_KEY:
+    genai.configure(api_key=GOOGLE_API_KEY)
+else:
+    print("⚠️ GOOGLE_API_KEY تنظیم نشده، فقط از gTTS استفاده میشود.")
+
+VOICE_CONFIG = {
+    "model": "models/gemini-3.1-flash-tts",
+    "voice_name": "fa-IR-Standard-A",
+    "speaking_rate": 1.0,
+    "pitch": 1.0,
+    "temperature": 0.7
+}
+
 CONFIG_DIR = "configs"
 if not os.path.exists(CONFIG_DIR):
     os.makedirs(CONFIG_DIR)
 
-# ===== تنظیمات پیش‌فرض برای هر گروه =====
 DEFAULT_CONFIG = {
     "target": "مسعود",
     "output_mode": "text",
@@ -30,7 +43,6 @@ DEFAULT_CONFIG = {
     }
 }
 
-# ===== لیست سودوها =====
 AUTHORIZED_USERS = [
     8273038319,
     7667099146,
@@ -40,14 +52,23 @@ AUTHORIZED_USERS = [
 # ===== فحش‌های متنی =====
 TEXT_INSULTS = [
     "مادرجنده",
-    "بی‌ناموس",
-    "کسمادر",
     "کونی",
-    "پدرسگ",
+    "کسمادر",
     "حرومزاده",
-    "خارکونی",
+    "بی‌ناموس",
     "بی‌شرف",
     "بی‌غیرت",
+    "خارکونی",
+    "مادرکونی",
+    "پدرکونی",
+    "کسکش",
+    "کیر و کس",
+    "دالگت",
+    "زیرمه",
+    "گاوصفت",
+    "ننه‌جنده",
+    "خایه‌مال",
+    "جنده",
     "کثافت",
     "هرزه",
     "لاابالی",
@@ -68,39 +89,35 @@ TEXT_INSULTS = [
     "ملعون",
     "گناهکار",
     "مجرم",
-    "خبیث",
-    "پلید",
-    "ناپاک",
-    "چرکین",
-    "کثیف",
-    "متعفن",
-    "گندیده",
     "مرده",
     "زامبی",
     "اهریمن",
     "شیطان",
-    "کیر و کس",
-    "دالگت",
-    "زیرمه",
-    "گاوصفت",
-    "ننه‌جنده",
-    "خایه‌مال",
-    "جنده",
-    "کون",
-    "کس",
+    "کون طاقار",
+    "مادر جنده",
+    "پدرسگ"
 ]
 
-# ===== فحش‌های صوتی (با حرکت درست) =====
+# ===== فحش‌های صوتی =====
 VOICE_INSULTS = [
     "مادرجنده",
-    "بی‌ناموس",
-    "کُسمادَر",
     "کونی",
-    "پدرسگ",
+    "کسمادر",
     "حرومزاده",
-    "خارکونی",
+    "بی‌ناموس",
     "بی‌شرف",
     "بی‌غیرت",
+    "خارکونی",
+    "مادرکونی",
+    "پدرکونی",
+    "کسکش",
+    "کیر و کس",
+    "دالگت",
+    "زیرمه",
+    "گاوصفت",
+    "ننه‌جنده",
+    "خایه‌مال",
+    "جنده",
     "کثافت",
     "هرزه",
     "لاابالی",
@@ -121,52 +138,41 @@ VOICE_INSULTS = [
     "ملعون",
     "گناهکار",
     "مجرم",
-    "خبیث",
-    "پلید",
-    "ناپاک",
-    "چرکین",
-    "کثیف",
-    "متعفن",
-    "گندیده",
     "مرده",
     "زامبی",
     "اهریمن",
     "شیطان",
-    "کیر و کس",
-    "دالگت",
-    "زیرمه",
-    "گاوصفت",
-    "ننه‌جنده",
-    "خایه‌مال",
-    "جنده",
-    "کون",
-    "کس",
+    "کون طاقار",
+    "مادر جنده",
+    "پدرسگ"
 ]
 
-# ===== تابع چسباندن با فرمت خاص =====
 def join_insults_custom(target, insult_list):
     """
-    چسباندن فحش‌ها با فرمت خاص:
-    - فحش اول: {فحش}ی
-    - فحش دوم به بعد: {فحش}ِ
-    مثال: مسعود + مادرجنده + بیناموس + کسمادر + کونی
-    → مسعود مادرجنده‌ی بیناموسِ کسمادرِ کونی
+    چسباندن فحش‌ها با فرمت:
+    - اولین فحش: {تارگت}ِ
+    - فحش‌های وسط: {فحش}ِ
+    - آخرین فحش: {فحش} (بدون چیزی)
+    - اگه به "ا" ختم شد: {فحش}ی
     """
     if not insult_list:
         return target
     
-    result = target + " "
+    vowels = "اآ"
+    
+    result = target + "ِ "
+    
     for i, insult in enumerate(insult_list):
-        if i == 0:
-            result += insult + "‌ی "
-        elif i == len(insult_list) - 1:
+        if i == len(insult_list) - 1:
             result += insult
         else:
-            result += insult + "ِ "
+            if insult and insult[-1] in vowels:
+                result += insult + "ی "
+            else:
+                result += insult + "ِ "
     
     return result.strip()
 
-# ===== بارگذاری تنظیمات گروه =====
 def load_group_config(chat_id):
     file_path = os.path.join(CONFIG_DIR, f"group_{chat_id}.json")
     try:
@@ -182,7 +188,6 @@ def save_group_config(chat_id, config):
     with open(file_path, 'w') as f:
         json.dump(config, f, indent=4)
 
-# ===== حالت‌های انتظار =====
 waiting_states = {}
 
 def convert_persian_to_english(text):
@@ -195,15 +200,29 @@ def convert_persian_to_english(text):
     return text
 
 async def send_voice_insult(reply_to_message, insult_text):
+    if GOOGLE_API_KEY:
+        try:
+            model = genai.GenerativeModel(VOICE_CONFIG["model"])
+            generation_config = {
+                "temperature": VOICE_CONFIG["temperature"],
+                "voice_name": VOICE_CONFIG["voice_name"],
+                "speaking_rate": VOICE_CONFIG["speaking_rate"],
+                "pitch": VOICE_CONFIG["pitch"]
+            }
+            response = model.generate_content(insult_text, generation_config=generation_config)
+            audio_data = response._result.candidates[0].content.parts[0].data
+            await reply_to_message.reply_voice(voice=BufferedInputFile(audio_data, filename="insult.mp3"))
+            return
+        except Exception as e:
+            print(f"⚠️ Google TTS Error: {e} → Fallback to gTTS")
+    
     try:
-        voice = "fa-IR-FaridNeural"
-        communicate = edge_tts.Communicate(text=insult_text, voice=voice)
-        audio_data = b""
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_data += chunk["data"]
+        tts = gTTS(text=insult_text, lang="fa", slow=False)
+        audio_bytes = io.BytesIO()
+        tts.write_to_fp(audio_bytes)
+        audio_bytes.seek(0)
         await reply_to_message.reply_voice(
-            voice=BufferedInputFile(audio_data, filename="insult.mp3")
+            voice=BufferedInputFile(audio_bytes.read(), filename="insult.ogg")
         )
     except Exception as e:
         await reply_to_message.reply(f"❌ خطا در ساخت ویس: {e}")
@@ -301,7 +320,6 @@ async def handler(message: Message):
     text = message.text.strip() if message.text else ""
     config = load_group_config(chat_id)
 
-    # تغییر تارگت
     if waiting_states.get(f"{chat_id}_waiting_for_target") and user_id in AUTHORIZED_USERS:
         if text:
             old_target = config['target']
@@ -313,7 +331,6 @@ async def handler(message: Message):
             await message.reply("❌ لطفاً یک نام معتبر وارد کنید.")
         return
 
-    # اضافه کردن فحش
     if waiting_states.get(f"{chat_id}_waiting_for_insult") and user_id in AUTHORIZED_USERS:
         if text:
             TEXT_INSULTS.append(text)
@@ -324,7 +341,6 @@ async def handler(message: Message):
             await message.reply("❌ لطفاً یک فحش وارد کنید.")
         return
 
-    # اضافه کردن سودو
     if waiting_states.get(f"{chat_id}_waiting_for_sudo") and user_id in AUTHORIZED_USERS:
         if text.isdigit():
             new_sudo = int(text)
@@ -338,7 +354,6 @@ async def handler(message: Message):
         waiting_states[f"{chat_id}_waiting_for_sudo"] = False
         return
 
-    # دستور فحش دادن
     if user_id not in AUTHORIZED_USERS:
         return
     if not message.reply_to_message:
