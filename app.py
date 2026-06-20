@@ -37,7 +37,7 @@ AUTHORIZED_USERS = [
     8811402550,
 ]
 
-# ===== فحش‌های متنی (بدون حرکات) =====
+# ===== فحش‌های متنی =====
 TEXT_INSULTS = [
     "بی شرف کون طاقار",
     "مادرجنده کثافت",
@@ -141,7 +141,7 @@ TEXT_INSULTS = [
     "شیطان پدرکونی",
 ]
 
-# ===== فحش‌های صوتی (با حرکات درست) =====
+# ===== فحش‌های صوتی =====
 VOICE_INSULTS = [
     "بی‌شَرَف کون طاقار",
     "مادَر جِنده کَثافَت",
@@ -248,18 +248,30 @@ VOICE_INSULTS = [
 # ===== تابع چسباندن هوشمند با "ی" ربطی =====
 def smart_join_insults(target, insult_list):
     """
-    چسباندن هوشمند فحش‌ها با "ی" ربطی
+    چسباندن هوشمند فحش‌ها با "ی" ربطی فقط وقتی لازمه
     مثال: مسعود + مادرجنده + بیناموس → مسعود مادرجنده‌ی بیناموس
     """
     if not insult_list:
         return target
     
+    # حروف صدا‌دار فارسی
+    vowels = 'اآاییو'
+    
     result = target
     for i, insult in enumerate(insult_list):
         if i == 0:
-            result += " " + insult
+            # اگه تارگت به حرف صدا‌دار ختم بشه، "ی" نمیاد
+            if target and target[-1] in vowels:
+                result += " " + insult
+            else:
+                result += " " + insult
         else:
-            result += "‌ی " + insult
+            # بین فحش‌ها: اگه کلمه‌ی قبلی به حرف بی‌صدا ختم بشه، "ی" میاد
+            prev_word = result.split()[-1] if result.split() else ""
+            if prev_word and prev_word[-1] not in vowels:
+                result += "‌ی " + insult
+            else:
+                result += " " + insult
     return result
 
 # ===== بارگذاری تنظیمات گروه =====
