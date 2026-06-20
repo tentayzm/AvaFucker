@@ -14,8 +14,6 @@ BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
 # ===== پوشه ذخیره تنظیمات گروه‌ها =====
 CONFIG_DIR = "configs"
-
-# ===== اطمینان از وجود پوشه =====
 if not os.path.exists(CONFIG_DIR):
     os.makedirs(CONFIG_DIR)
 
@@ -143,7 +141,7 @@ TEXT_INSULTS = [
     "شیطان پدرکونی",
 ]
 
-# ===== فحش‌های صوتی (با حرکات درست و تلفظ "کونی") =====
+# ===== فحش‌های صوتی (با حرکات درست) =====
 VOICE_INSULTS = [
     "بی‌شَرَف کون طاقار",
     "مادَر جِنده کَثافَت",
@@ -247,25 +245,21 @@ VOICE_INSULTS = [
     "شیطان پِدَر کونی",
 ]
 
-# ===== تابع چسباندن هوشمند فحش‌ها =====
+# ===== تابع چسباندن هوشمند با "ی" ربطی =====
 def smart_join_insults(target, insult_list):
     """
-    چسباندن هوشمند فحش‌ها به تارگت با "ـِ" یا فاصله
-    مثال: مسعود + پدرسگ + مادرکونی → مسعودِ پدرسگِ مادرکونی
+    چسباندن هوشمند فحش‌ها با "ی" ربطی
+    مثال: مسعود + مادرجنده + بیناموس → مسعود مادرجنده‌ی بیناموس
     """
-    # اگه فقط یه فحش باشه، همون رو با تارگت برمی‌گردونیم
-    if len(insult_list) == 1:
-        return f"{target} {insult_list[0]}"
+    if not insult_list:
+        return target
     
-    # چسباندن با "ـِ" برای فحش‌های مرکب
-    # کلمات فارسی که به حرف بی‌صدا ختم میشن، "ـِ" میگیرن
     result = target
-    for insult in insult_list:
-        # اگه کلمه به حرف بی‌صدا ختم بشه، "ـِ" اضافه کن
-        if insult and insult[-1] not in "آاآهیوی":
-            result += "ِ " + insult
-        else:
+    for i, insult in enumerate(insult_list):
+        if i == 0:
             result += " " + insult
+        else:
+            result += "‌ی " + insult
     return result
 
 # ===== بارگذاری تنظیمات گروه =====
@@ -279,7 +273,6 @@ def load_group_config(chat_id):
         save_group_config(chat_id, config)
         return config
 
-# ===== ذخیره تنظیمات گروه =====
 def save_group_config(chat_id, config):
     file_path = os.path.join(CONFIG_DIR, f"group_{chat_id}.json")
     with open(file_path, 'w') as f:
@@ -297,7 +290,6 @@ def convert_persian_to_english(text):
         text = text.replace(persian, english)
     return text
 
-# ===== تبدیل متن به ویس با Edge TTS (صدای مردانه) =====
 async def send_voice_insult(reply_to_message, insult_text):
     try:
         voice = "fa-IR-FaridNeural"
@@ -306,7 +298,6 @@ async def send_voice_insult(reply_to_message, insult_text):
         async for chunk in communicate.stream():
             if chunk["type"] == "audio":
                 audio_data += chunk["data"]
-        
         await reply_to_message.reply_voice(
             voice=BufferedInputFile(audio_data, filename="insult.mp3")
         )
@@ -316,7 +307,6 @@ async def send_voice_insult(reply_to_message, insult_text):
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ===== کیبورد شیشه‌ای پنل =====
 def panel_keyboard(config):
     mode_text = "🔊 ویس" if config.get("output_mode") == "voice" else "📝 متن"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -335,16 +325,13 @@ def panel_keyboard(config):
     ])
     return keyboard
 
-# ===== دستور /panel =====
 @dp.message(Command("panel"))
 async def panel_command(message: Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
-    
     if user_id not in AUTHORIZED_USERS:
         await message.reply("⛔ شما دسترسی به این پنل ندارید!")
         return
-    
     config = load_group_config(chat_id)
     await message.reply(
         f"🔧 **تنظیمات ربات فاکر - گروه {chat_id}**\n\n"
@@ -356,191 +343,135 @@ async def panel_command(message: Message):
         reply_markup=panel_keyboard(config)
     )
 
-# ===== پردازش دکمه‌ها =====
 @dp.callback_query()
 async def handle_callback(callback: CallbackQuery):
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
-    
     if user_id not in AUTHORIZED_USERS:
         await callback.answer("⛔ شما دسترسی ندارید!", show_alert=True)
         return
-
     config = load_group_config(chat_id)
     
     if callback.data == "change_target":
         await callback.message.edit_text(
-            "🎯 **تغییر تارگت**\n"
-            "لطفاً نام شخص جدید را وارد کنید.\n"
-            "مثال: `هینا`\n\n"
+            "🎯 **تغییر تارگت**\nلطفاً نام شخص جدید را وارد کنید.\n"
             f"تارگت فعلی: {config['target']}"
         )
         waiting_states[f"{chat_id}_waiting_for_target"] = True
         await callback.answer()
-
     elif callback.data == "add_sudo":
         await callback.message.edit_text(
-            "➕ **اضافه کردن سودو جدید**\n"
-            "لطفاً آیدی عددی سودو جدید را وارد کنید.\n"
-            "مثال: `123456789`\n\n"
-            "برای پیدا کردن آیدی عددی، به @userinfobot بروید."
+            "➕ **اضافه کردن سودو جدید**\nلطفاً آیدی عددی سودو جدید را وارد کنید."
         )
         waiting_states[f"{chat_id}_waiting_for_sudo"] = True
         await callback.answer()
-
     elif callback.data == "add_insult":
         await callback.message.edit_text(
-            "➕ **اضافه کردن فحش جدید**\n"
-            "لطفاً فحش جدید را وارد کنید:\n"
-            "مثال: `مادرکونی`\n\n"
-            f"تعداد فحش‌ها: {len(TEXT_INSULTS)}"
+            "➕ **اضافه کردن فحش جدید**\nلطفاً فحش جدید را وارد کنید."
         )
         waiting_states[f"{chat_id}_waiting_for_insult"] = True
         await callback.answer()
-
     elif callback.data == "output_mode":
-        if config.get("output_mode") == "text":
-            config["output_mode"] = "voice"
-        else:
-            config["output_mode"] = "text"
+        config["output_mode"] = "voice" if config.get("output_mode") == "text" else "text"
         save_group_config(chat_id, config)
-        
         await callback.message.edit_text(
-            f"🔧 **تنظیمات ربات فاکر - گروه {chat_id}**\n\n"
-            f"👤 تارگت فعلی: {config['target']}\n"
-            f"🎙️ حالت خروجی: {'ویس' if config.get('output_mode') == 'voice' else 'متن'}\n"
-            f"📝 تعداد فحش‌ها: {len(TEXT_INSULTS)}\n"
-            f"👥 تعداد سودوها: {len(AUTHORIZED_USERS)}\n\n"
             f"✅ حالت خروجی به **{'ویس' if config.get('output_mode') == 'voice' else 'متن'}** تغییر کرد!",
             reply_markup=panel_keyboard(config)
         )
-        await callback.answer(f"حالت به {'ویس' if config.get('output_mode') == 'voice' else 'متن'} تغییر کرد!")
-
+        await callback.answer()
     elif callback.data == "help":
-        help_text = (
-            "📖 **راهنمای ربات**\n\n"
-            "🔹 **دستورات اصلی:**\n"
-            "`/panel` - باز کردن پنل مدیریت\n\n"
-            "🔹 **دستور فحش دادن:**\n"
-            f"`{config['target']} رو بگا {{عدد}}`\n"
-            f"مثال: `{config['target']} رو بگا 5`\n\n"
-            "🔹 **نحوه کار:**\n"
-            "1️⃣ روی پیام یک کاربر ریپلای بزنید\n"
-            "2️⃣ دستور فحش دادن را بنویسید\n"
-            "3️⃣ ربات به آن کاربر فحش می‌دهد\n\n"
-            "🔹 **حالت خروجی:**\n"
-            "• **متن**: فحش‌ها به صورت پیام متنی ارسال می‌شوند\n"
-            "• **ویس**: فحش‌ها به صورت ویس (صوت) ارسال می‌شوند\n\n"
-            "🔹 **مدیریت:**\n"
-            "• تغییر تارگت: نام شخص مورد نظر را تغییر دهید\n"
-            "• اضافه کردن سودو: کاربران جدید را اضافه کنید\n"
-            "• اضافه کردن فحش: فحش‌های جدید به لیست اضافه می‌شوند\n\n"
-            "🔹 **تعداد فحش‌ها:** ۱ تا ۱۰۰"
+        await callback.message.edit_text(
+            "📖 **راهنما**\n\n"
+            f"دستور فحش دادن: `{config['target']} رو بگا {{عدد}}`\n"
+            "مثال: `مسعود رو بگا 5`\n\n"
+            "1️⃣ روی پیام ریپلای بزنید\n"
+            "2️⃣ دستور را بنویسید\n"
+            "3️⃣ ربات فحش می‌دهد"
         )
-        await callback.message.edit_text(help_text)
         await callback.answer()
 
-# ===== هندلر پیام‌های متنی =====
 @dp.message()
 async def handler(message: Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     text = message.text.strip() if message.text else ""
-
     config = load_group_config(chat_id)
 
-    # ===== ۱. تغییر تارگت =====
+    # تغییر تارگت
     if waiting_states.get(f"{chat_id}_waiting_for_target") and user_id in AUTHORIZED_USERS:
         if text:
             old_target = config['target']
             config['target'] = text
             save_group_config(chat_id, config)
             waiting_states[f"{chat_id}_waiting_for_target"] = False
-            await message.reply(
-                f"✅ تارگت این گروه با موفقیت تغییر کرد!\n"
-                f"🔄 از `{old_target}` به `{text}`\n\n"
-                f"دستور جدید: `{text} رو بگا {{عدد}}`"
-            )
+            await message.reply(f"✅ تارگت از `{old_target}` به `{text}` تغییر کرد!")
         else:
             await message.reply("❌ لطفاً یک نام معتبر وارد کنید.")
         return
 
-    # ===== ۲. اضافه کردن فحش =====
+    # اضافه کردن فحش
     if waiting_states.get(f"{chat_id}_waiting_for_insult") and user_id in AUTHORIZED_USERS:
         if text:
             TEXT_INSULTS.append(text)
             VOICE_INSULTS.append(text)
             waiting_states[f"{chat_id}_waiting_for_insult"] = False
-            await message.reply(
-                f"✅ فحش `{text}` با موفقیت به لیست اضافه شد!\n"
-                f"📝 تعداد فحش‌ها: {len(TEXT_INSULTS)}"
-            )
+            await message.reply(f"✅ فحش `{text}` اضافه شد! ({len(TEXT_INSULTS)} عدد)")
         else:
-            await message.reply("❌ لطفاً یک فحش معتبر وارد کنید.")
+            await message.reply("❌ لطفاً یک فحش وارد کنید.")
         return
 
-    # ===== ۳. اضافه کردن سودو =====
+    # اضافه کردن سودو
     if waiting_states.get(f"{chat_id}_waiting_for_sudo") and user_id in AUTHORIZED_USERS:
         if text.isdigit():
             new_sudo = int(text)
             if new_sudo not in AUTHORIZED_USERS:
                 AUTHORIZED_USERS.append(new_sudo)
-                await message.reply(f"✅ سودو با آیدی `{new_sudo}` با موفقیت اضافه شد!")
+                await message.reply(f"✅ سودو با آیدی `{new_sudo}` اضافه شد!")
             else:
-                await message.reply(f"❌ این کاربر قبلاً در لیست سودوها است!")
+                await message.reply("❌ این کاربر قبلاً سودو است!")
         else:
-            await message.reply("❌ لطفاً یک آیدی عددی معتبر وارد کنید (فقط اعداد).")
+            await message.reply("❌ لطفاً یک آیدی عددی وارد کنید.")
         waiting_states[f"{chat_id}_waiting_for_sudo"] = False
         return
 
-    # ===== ۴. دستور فحش دادن =====
+    # دستور فحش دادن
     if user_id not in AUTHORIZED_USERS:
         return
-
     if not message.reply_to_message:
         return
 
     pattern = rf'^{config["target"]} رو بگا\s+(\d+)$'
     match = re.match(pattern, text)
-    
     if not match:
         return
 
     number_text = match.group(1)
     number_text_english = convert_persian_to_english(number_text)
-    
     if not number_text_english.isdigit():
         return
-        
     number = int(number_text_english)
-
     if not (1 <= number <= 100):
         return
 
-    # ===== ارسال فحش‌ها با چسباندن هوشمند =====
     CHUNK_SIZE = 4
     insult_list = VOICE_INSULTS if config.get("output_mode") == "voice" else TEXT_INSULTS
     
     for i in range(number):
-        # انتخاب ۴ فحش
         chunk = []
         for j in range(CHUNK_SIZE):
             index = (i * CHUNK_SIZE + j) % len(insult_list)
             chunk.append(insult_list[index])
         
-        # چسباندن هوشمند فحش‌ها
         insult_text = smart_join_insults(config['target'], chunk)
         
         if config.get("output_mode") == "voice":
             await send_voice_insult(message.reply_to_message, insult_text)
         else:
             await message.reply_to_message.reply(insult_text)
-        
         await asyncio.sleep(2)
 
 # ===== Flask =====
 app = Flask(__name__)
-
 @app.route('/')
 @app.route('/health')
 def health():
