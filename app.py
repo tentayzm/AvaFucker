@@ -3,6 +3,7 @@ import os
 import re
 import json
 import io
+from datetime import datetime, date
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BufferedInputFile
 from aiogram.filters import Command
@@ -11,18 +12,32 @@ import edge_tts
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
-# ===== لیست سودوها =====
+# ===== پوشه ذخیره تنظیمات گروه‌ها =====
+CONFIG_DIR = "configs"
+
+# ===== اطمینان از وجود پوشه =====
+if not os.path.exists(CONFIG_DIR):
+    os.makedirs(CONFIG_DIR)
+
+# ===== تنظیمات پیش‌فرض برای هر گروه =====
+DEFAULT_CONFIG = {
+    "target": "مسعود",
+    "output_mode": "text",
+    "users_stats": {},
+    "daily_limits": {
+        "max_insults_per_day": 20,
+        "max_insults_per_request": 50,
+        "max_sudos": 10,
+        "max_insults_stored": 200
+    }
+}
+
+# ===== لیست سودوها (آیدی عددی) =====
 AUTHORIZED_USERS = [
     8273038319,
     7667099146,
     8811402550,
 ]
-
-# ===== تنظیمات پیش‌فرض =====
-CONFIG = {
-    "target": "مسعود",
-    "output_mode": "text",
-}
 
 # ===== فحش‌های متنی (بدون حرکات) =====
 TEXT_INSULTS = [
@@ -128,132 +143,150 @@ TEXT_INSULTS = [
     "شیطان پدرکونی",
 ]
 
-# ===== فحش‌های صوتی (با حرکات، برای ویس) =====
+# ===== فحش‌های صوتی (با حرکات درست و تلفظ "کونی") =====
 VOICE_INSULTS = [
     "بی‌شَرَف کون طاقار",
     "مادَر جِنده کَثافَت",
-    "خار کُنی پِدَر سَگ",
-    "پِدَر سَگ مادَر کُنی",
+    "خار کونی پِدَر سَگ",
+    "پِدَر سَگ مادَر کونی",
     "حَرام‌زادِه کُس‌کِش",
     "بی‌غِیرَت مادَر جِنده",
-    "بی‌شَرَف پِدَر کُنی",
-    "کَثنَنَت مادَر کُنی",
+    "بی‌شَرَف پِدَر کونی",
+    "کَثنَنَت مادَر کونی",
     "کِس‌نِنِه پِدَر سَگ",
-    "مادَر کُنی بی‌شَرَف",
+    "مادَر کونی بی‌شَرَف",
     "کیر و کُس دالگَت مادَر جِنده",
     "مادَرَت زیرِمِه پِدَر سَگ",
-    "مادَرَت را کُس دار زَدَم کُنی",
+    "مادَرَت را کُس دار زَدَم کونی",
     "گاو صِفَت مادَر جِنده",
-    "نَنِه جِنده پِدَر کُنی",
+    "نَنِه جِنده پِدَر کونی",
     "کیرَت تو کونَت پِدَر سَگ",
     "مادَرَت تو سَگ‌خونِه کُس‌کِش",
     "پِدَرَت خایِه‌مال مادَر جِنده",
-    "خواهَرَت جِنده‌سِت کُنی",
-    "کُنی حَرام‌زادِه پِدَر سَگ",
+    "خواهَرَت جِنده‌سِت کونی",
+    "کونی حَرام‌زادِه پِدَر سَگ",
     "اهل کون و کُس مادَر جِنده",
     "مادَرَت را گاییدِن بی‌شَرَف",
-    "نَنِه‌ت را کون پِدَر کُنی",
+    "نَنِه‌ت را کون پِدَر کونی",
     "پِدَرَت را کون مادَر جِنده",
     "کُس کِش پِدَر سَگ",
-    "کُنی پِدَر سَگ مادَر جِنده",
+    "کونی پِدَر سَگ مادَر جِنده",
     "مادَر جِنده‌زادِه کُس‌کِش",
-    "کُنی بی‌حَیا مادَر کُنی",
+    "کونی بی‌حَیا مادَر کونی",
     "مادَرَت را کیر پِدَر سَگ",
     "خواهَرَت را کیر جِنده",
     "کُس نَنَت مادَر جِنده",
-    "کیر نَنَت پِدَر کُنی",
+    "کیر نَنَت پِدَر کونی",
     "تو کون مادَرَت پِدَر سَگ",
     "بِرو گوه بِخُور مادَر جِنده",
     "کونَش گاییدِن بی‌شَرَف",
     "مادَرَت گاو کُس‌کِش",
-    "پِدَرَت سَگ کُنی",
-    "بی‌مَغز کُنی مادَر جِنده",
+    "پِدَرَت سَگ کونی",
+    "بی‌مَغز کونی مادَر جِنده",
     "کُس و کیر تو کونَت پِدَر سَگ",
-    "بی‌عَقل مادَر کُنی",
-    "بی‌شُعور پِدَر کُنی",
+    "بی‌عَقل مادَر کونی",
+    "بی‌شُعور پِدَر کونی",
     "بی‌حَیا مادَر جِنده",
     "بی‌مُرُوَت کُس‌کِش",
     "بی‌عِزَت پِدَر سَگ",
     "بی‌آبرو مادَر جِنده",
-    "بی‌هَویَّت کُنی",
-    "بی‌اصالَت پِدَر کُنی",
+    "بی‌هَویَّت کونی",
+    "بی‌اصالَت پِدَر کونی",
     "کَثافَت مادَر جِنده",
     "خائِن پِدَر سَگ",
-    "پُست مادَر کُنی",
+    "پُست مادَر کونی",
     "حَقیر بی‌شَرَف",
     "اَبلَه کُس‌کِش",
-    "نادان پِدَر کُنی",
+    "نادان پِدَر کونی",
     "اَلاغ مادَر جِنده",
     "خَر پِدَر سَگ",
     "گاو کُس‌کِش",
     "سَگ مادَر جِنده",
-    "خوک پِدَر کُنی",
+    "خوک پِدَر کونی",
     "مار بی‌شَرَف",
-    "عَقرَب کُنی",
+    "عَقرَب کونی",
     "کِرْم مادَر جِنده",
     "اَنگَل پِدَر سَگ",
     "زالو کُس‌کِش",
-    "رِذل مادَر کُنی",
-    "نَنگ پِدَر کُنی",
+    "رِذل مادَر کونی",
+    "نَنگ پِدَر کونی",
     "عار بی‌شَرَف",
     "فاحِشِه مادَر جِنده",
-    "روسپی کُنی",
+    "روسپی کونی",
     "بَدکارِه پِدَر سَگ",
     "هَرزِه مادَر جِنده",
     "بی‌عِفَّت کُس‌کِش",
-    "لااَبالی پِدَر کُنی",
+    "لااَبالی پِدَر کونی",
     "وَلَنگار مادَر جِنده",
     "بی‌بَندوبار پِدَر سَگ",
-    "بی‌سَر و پا کُنی",
+    "بی‌سَر و پا کونی",
     "بی‌ریشِه مادَر جِنده",
-    "بی‌اَصل پِدَر کُنی",
+    "بی‌اَصل پِدَر کونی",
     "بی‌نِسب کُس‌کِش",
     "بی‌تَبار مادَر جِنده",
     "بی‌خانوادِه پِدَر سَگ",
-    "بی‌پِدَر مادَر کُنی",
-    "بی‌مادَر پِدَر کُنی",
-    "یَتیم کُنی",
+    "بی‌پِدَر مادَر کونی",
+    "بی‌مادَر پِدَر کونی",
+    "یَتیم کونی",
     "طَرد شُدِه مادَر جِنده",
     "رانِه شُدِه پِدَر سَگ",
     "لَعَنتی کُس‌کِش",
     "مَلعون مادَر جِنده",
-    "گُناهکار پِدَر کُنی",
+    "گُناهکار پِدَر کونی",
     "مُجرِم بی‌شَرَف",
     "خَبیث مادَر جِنده",
-    "پَلید کُنی",
+    "پَلید کونی",
     "ناپاک پِدَر سَگ",
-    "چِرکین مادَر کُنی",
+    "چِرکین مادَر کونی",
     "کَثیف کُس‌کِش",
-    "مُتَعَفِن پِدَر کُنی",
+    "مُتَعَفِن پِدَر کونی",
     "گَندیدِه مادَر جِنده",
     "مُردِه پِدَر سَگ",
-    "زامبی کُنی",
+    "زامبی کونی",
     "اَهریمَن مادَر جِنده",
-    "شیطان پِدَر کُنی",
+    "شیطان پِدَر کونی",
 ]
 
-# ===== ذخیره و بارگذاری تنظیمات =====
-CONFIG_FILE = "config.json"
+# ===== تابع چسباندن هوشمند فحش‌ها =====
+def smart_join_insults(target, insult_list):
+    """
+    چسباندن هوشمند فحش‌ها به تارگت با "ـِ" یا فاصله
+    مثال: مسعود + پدرسگ + مادرکونی → مسعودِ پدرسگِ مادرکونی
+    """
+    # اگه فقط یه فحش باشه، همون رو با تارگت برمی‌گردونیم
+    if len(insult_list) == 1:
+        return f"{target} {insult_list[0]}"
+    
+    # چسباندن با "ـِ" برای فحش‌های مرکب
+    # کلمات فارسی که به حرف بی‌صدا ختم میشن، "ـِ" میگیرن
+    result = target
+    for insult in insult_list:
+        # اگه کلمه به حرف بی‌صدا ختم بشه، "ـِ" اضافه کن
+        if insult and insult[-1] not in "آاآهیوی":
+            result += "ِ " + insult
+        else:
+            result += " " + insult
+    return result
 
-def load_config():
+# ===== بارگذاری تنظیمات گروه =====
+def load_group_config(chat_id):
+    file_path = os.path.join(CONFIG_DIR, f"group_{chat_id}.json")
     try:
-        with open(CONFIG_FILE, 'r') as f:
+        with open(file_path, 'r') as f:
             return json.load(f)
     except:
-        return CONFIG
+        config = DEFAULT_CONFIG.copy()
+        save_group_config(chat_id, config)
+        return config
 
-def save_config(config):
-    with open(CONFIG_FILE, 'w') as f:
+# ===== ذخیره تنظیمات گروه =====
+def save_group_config(chat_id, config):
+    file_path = os.path.join(CONFIG_DIR, f"group_{chat_id}.json")
+    with open(file_path, 'w') as f:
         json.dump(config, f, indent=4)
 
-config = load_config()
-
 # ===== حالت‌های انتظار =====
-waiting_states = {
-    "waiting_for_target": False,
-    "waiting_for_sudo": False,
-    "waiting_for_insult": False
-}
+waiting_states = {}
 
 def convert_persian_to_english(text):
     persian_to_english = {
@@ -267,7 +300,7 @@ def convert_persian_to_english(text):
 # ===== تبدیل متن به ویس با Edge TTS (صدای مردانه) =====
 async def send_voice_insult(reply_to_message, insult_text):
     try:
-        voice = "fa-IR-FaridNeural"  # صدای مردانه
+        voice = "fa-IR-FaridNeural"
         communicate = edge_tts.Communicate(text=insult_text, voice=voice)
         audio_data = b""
         async for chunk in communicate.stream():
@@ -284,7 +317,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 # ===== کیبورد شیشه‌ای پنل =====
-def panel_keyboard():
+def panel_keyboard(config):
     mode_text = "🔊 ویس" if config.get("output_mode") == "voice" else "📝 متن"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -306,27 +339,35 @@ def panel_keyboard():
 @dp.message(Command("panel"))
 async def panel_command(message: Message):
     user_id = message.from_user.id
+    chat_id = message.chat.id
+    
     if user_id not in AUTHORIZED_USERS:
         await message.reply("⛔ شما دسترسی به این پنل ندارید!")
         return
+    
+    config = load_group_config(chat_id)
     await message.reply(
-        f"🔧 **تنظیمات ربات فاکر**\n\n"
+        f"🔧 **تنظیمات ربات فاکر - گروه {chat_id}**\n\n"
         f"👤 تارگت فعلی: {config['target']}\n"
         f"🎙️ حالت خروجی: {'ویس' if config.get('output_mode') == 'voice' else 'متن'}\n"
         f"📝 تعداد فحش‌ها: {len(TEXT_INSULTS)}\n"
         f"👥 تعداد سودوها: {len(AUTHORIZED_USERS)}\n\n"
         f"یکی از گزینه‌های زیر رو انتخاب کن:",
-        reply_markup=panel_keyboard()
+        reply_markup=panel_keyboard(config)
     )
 
 # ===== پردازش دکمه‌ها =====
 @dp.callback_query()
 async def handle_callback(callback: CallbackQuery):
     user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    
     if user_id not in AUTHORIZED_USERS:
         await callback.answer("⛔ شما دسترسی ندارید!", show_alert=True)
         return
 
+    config = load_group_config(chat_id)
+    
     if callback.data == "change_target":
         await callback.message.edit_text(
             "🎯 **تغییر تارگت**\n"
@@ -334,7 +375,7 @@ async def handle_callback(callback: CallbackQuery):
             "مثال: `هینا`\n\n"
             f"تارگت فعلی: {config['target']}"
         )
-        waiting_states["waiting_for_target"] = True
+        waiting_states[f"{chat_id}_waiting_for_target"] = True
         await callback.answer()
 
     elif callback.data == "add_sudo":
@@ -344,7 +385,7 @@ async def handle_callback(callback: CallbackQuery):
             "مثال: `123456789`\n\n"
             "برای پیدا کردن آیدی عددی، به @userinfobot بروید."
         )
-        waiting_states["waiting_for_sudo"] = True
+        waiting_states[f"{chat_id}_waiting_for_sudo"] = True
         await callback.answer()
 
     elif callback.data == "add_insult":
@@ -354,7 +395,7 @@ async def handle_callback(callback: CallbackQuery):
             "مثال: `مادرکونی`\n\n"
             f"تعداد فحش‌ها: {len(TEXT_INSULTS)}"
         )
-        waiting_states["waiting_for_insult"] = True
+        waiting_states[f"{chat_id}_waiting_for_insult"] = True
         await callback.answer()
 
     elif callback.data == "output_mode":
@@ -362,16 +403,16 @@ async def handle_callback(callback: CallbackQuery):
             config["output_mode"] = "voice"
         else:
             config["output_mode"] = "text"
-        save_config(config)
+        save_group_config(chat_id, config)
         
         await callback.message.edit_text(
-            f"🔧 **تنظیمات ربات فاکر**\n\n"
+            f"🔧 **تنظیمات ربات فاکر - گروه {chat_id}**\n\n"
             f"👤 تارگت فعلی: {config['target']}\n"
             f"🎙️ حالت خروجی: {'ویس' if config.get('output_mode') == 'voice' else 'متن'}\n"
             f"📝 تعداد فحش‌ها: {len(TEXT_INSULTS)}\n"
             f"👥 تعداد سودوها: {len(AUTHORIZED_USERS)}\n\n"
             f"✅ حالت خروجی به **{'ویس' if config.get('output_mode') == 'voice' else 'متن'}** تغییر کرد!",
-            reply_markup=panel_keyboard()
+            reply_markup=panel_keyboard(config)
         )
         await callback.answer(f"حالت به {'ویس' if config.get('output_mode') == 'voice' else 'متن'} تغییر کرد!")
 
@@ -399,21 +440,24 @@ async def handle_callback(callback: CallbackQuery):
         await callback.message.edit_text(help_text)
         await callback.answer()
 
-# ===== هندلر پیام‌های متنی (فقط به دستورات مشخص پاسخ میده) =====
+# ===== هندلر پیام‌های متنی =====
 @dp.message()
 async def handler(message: Message):
     user_id = message.from_user.id
+    chat_id = message.chat.id
     text = message.text.strip() if message.text else ""
 
+    config = load_group_config(chat_id)
+
     # ===== ۱. تغییر تارگت =====
-    if waiting_states.get("waiting_for_target") and user_id in AUTHORIZED_USERS:
+    if waiting_states.get(f"{chat_id}_waiting_for_target") and user_id in AUTHORIZED_USERS:
         if text:
             old_target = config['target']
             config['target'] = text
-            save_config(config)
-            waiting_states["waiting_for_target"] = False
+            save_group_config(chat_id, config)
+            waiting_states[f"{chat_id}_waiting_for_target"] = False
             await message.reply(
-                f"✅ تارگت با موفقیت تغییر کرد!\n"
+                f"✅ تارگت این گروه با موفقیت تغییر کرد!\n"
                 f"🔄 از `{old_target}` به `{text}`\n\n"
                 f"دستور جدید: `{text} رو بگا {{عدد}}`"
             )
@@ -422,11 +466,11 @@ async def handler(message: Message):
         return
 
     # ===== ۲. اضافه کردن فحش =====
-    if waiting_states.get("waiting_for_insult") and user_id in AUTHORIZED_USERS:
+    if waiting_states.get(f"{chat_id}_waiting_for_insult") and user_id in AUTHORIZED_USERS:
         if text:
             TEXT_INSULTS.append(text)
             VOICE_INSULTS.append(text)
-            waiting_states["waiting_for_insult"] = False
+            waiting_states[f"{chat_id}_waiting_for_insult"] = False
             await message.reply(
                 f"✅ فحش `{text}` با موفقیت به لیست اضافه شد!\n"
                 f"📝 تعداد فحش‌ها: {len(TEXT_INSULTS)}"
@@ -436,7 +480,7 @@ async def handler(message: Message):
         return
 
     # ===== ۳. اضافه کردن سودو =====
-    if waiting_states.get("waiting_for_sudo") and user_id in AUTHORIZED_USERS:
+    if waiting_states.get(f"{chat_id}_waiting_for_sudo") and user_id in AUTHORIZED_USERS:
         if text.isdigit():
             new_sudo = int(text)
             if new_sudo not in AUTHORIZED_USERS:
@@ -446,19 +490,16 @@ async def handler(message: Message):
                 await message.reply(f"❌ این کاربر قبلاً در لیست سودوها است!")
         else:
             await message.reply("❌ لطفاً یک آیدی عددی معتبر وارد کنید (فقط اعداد).")
-        waiting_states["waiting_for_sudo"] = False
+        waiting_states[f"{chat_id}_waiting_for_sudo"] = False
         return
 
-    # ===== ۴. دستور فحش دادن (فقط با ریپلای) =====
-    # چک کردن سودو بودن
+    # ===== ۴. دستور فحش دادن =====
     if user_id not in AUTHORIZED_USERS:
         return
 
-    # چک کردن ریپلای
     if not message.reply_to_message:
         return
 
-    # چک کردن دستور فحش دادن
     pattern = rf'^{config["target"]} رو بگا\s+(\d+)$'
     match = re.match(pattern, text)
     
@@ -476,17 +517,19 @@ async def handler(message: Message):
     if not (1 <= number <= 100):
         return
 
-    # ===== ارسال فحش‌ها =====
+    # ===== ارسال فحش‌ها با چسباندن هوشمند =====
     CHUNK_SIZE = 4
     insult_list = VOICE_INSULTS if config.get("output_mode") == "voice" else TEXT_INSULTS
     
     for i in range(number):
+        # انتخاب ۴ فحش
         chunk = []
         for j in range(CHUNK_SIZE):
             index = (i * CHUNK_SIZE + j) % len(insult_list)
-            chunk.append(f"{config['target']} {insult_list[index]}")
+            chunk.append(insult_list[index])
         
-        insult_text = " ".join(chunk)
+        # چسباندن هوشمند فحش‌ها
+        insult_text = smart_join_insults(config['target'], chunk)
         
         if config.get("output_mode") == "voice":
             await send_voice_insult(message.reply_to_message, insult_text)
