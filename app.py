@@ -9,6 +9,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, C
 from aiogram.filters import Command
 from flask import Flask
 import edge_tts
+from hazm import Normalizer
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
@@ -245,34 +246,27 @@ VOICE_INSULTS = [
     "شیطان پِدَر کونی",
 ]
 
-# ===== تابع چسباندن هوشمند با "ی" ربطی =====
-def smart_join_insults(target, insult_list):
+# ===== راه‌اندازی Hazm =====
+normalizer = Normalizer()
+
+# ===== تابع چسباندن هوشمند با Hazm =====
+def smart_join_with_hazm(target, insult_list):
     """
-    چسباندن هوشمند فحش‌ها با "ی" ربطی فقط وقتی لازمه
-    مثال: مسعود + مادرجنده + بیناموس → مسعود مادرجنده‌ی بیناموس
+    چسباندن هوشمند با Hazm
     """
     if not insult_list:
         return target
     
-    # حروف صدا‌دار فارسی
-    vowels = 'اآاییو'
+    # نرمال‌سازی تارگت
+    target = normalizer.normalize(target)
     
-    result = target
-    for i, insult in enumerate(insult_list):
-        if i == 0:
-            # اگه تارگت به حرف صدا‌دار ختم بشه، "ی" نمیاد
-            if target and target[-1] in vowels:
-                result += " " + insult
-            else:
-                result += " " + insult
-        else:
-            # بین فحش‌ها: اگه کلمه‌ی قبلی به حرف بی‌صدا ختم بشه، "ی" میاد
-            prev_word = result.split()[-1] if result.split() else ""
-            if prev_word and prev_word[-1] not in vowels:
-                result += "‌ی " + insult
-            else:
-                result += " " + insult
-    return result
+    # ساخت جمله کامل
+    full_text = target + " " + " ".join(insult_list)
+    
+    # نرمال‌سازی نهایی (خودش "ی" ربطی رو درست می‌کنه)
+    final_text = normalizer.normalize(full_text)
+    
+    return final_text
 
 # ===== بارگذاری تنظیمات گروه =====
 def load_group_config(chat_id):
@@ -474,7 +468,8 @@ async def handler(message: Message):
             index = (i * CHUNK_SIZE + j) % len(insult_list)
             chunk.append(insult_list[index])
         
-        insult_text = smart_join_insults(config['target'], chunk)
+        # استفاده از Hazm برای چسباندن هوشمند
+        insult_text = smart_join_with_hazm(config['target'], chunk)
         
         if config.get("output_mode") == "voice":
             await send_voice_insult(message.reply_to_message, insult_text)
