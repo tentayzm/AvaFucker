@@ -71,11 +71,14 @@
 
 ## ۶. ارتباط با ما
 
-برای گزارش مشکلات، پیشنهادات یا سوالات، با آیدی زیر تماس بگیرید:
+برای گزارش مشکلات، پیشنهادات یا سوالات، با آیدی‌های زیر تماس بگیرید:
 
 <p align="center">
   <a href="https://t.me/llxisagi">
-    <img src="https://img.shields.io/badge/ارتباط_با_ما-@llxisagi-0088CC?style=for-the-badge&logo=telegram&logoColor=white" alt="ارتباط با ما"/>
+    <img src="https://img.shields.io/badge/llxisagi-0088CC?style=for-the-badge&logo=telegram&logoColor=white" alt="llxisagi"/>
+  </a>
+  <a href="https://t.me/TaakaaOrg">
+    <img src="https://img.shields.io/badge/TaakaaOrg-FF6B6B?style=for-the-badge&logo=telegram&logoColor=white" alt="TaakaaOrg"/>
   </a>
 </p>
 
