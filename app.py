@@ -90,11 +90,11 @@ TEXT_INSULTS = [
     "کس",
 ]
 
-# ===== فحش‌های صوتی =====
+# ===== فحش‌های صوتی (با حرکت درست) =====
 VOICE_INSULTS = [
     "مادرجنده",
     "بی‌ناموس",
-    "کسمادر",
+    "کُسمادَر",
     "کونی",
     "پدرسگ",
     "حرومزاده",
@@ -158,13 +158,10 @@ def join_insults_custom(target, insult_list):
     result = target + " "
     for i, insult in enumerate(insult_list):
         if i == 0:
-            # فحش اول: "ی" ربطی
             result += insult + "‌ی "
         elif i == len(insult_list) - 1:
-            # آخرین فحش: بدون اعراب (فقط فاصله)
             result += insult
         else:
-            # فحش‌های وسط: "ـِ"
             result += insult + "ِ "
     
     return result.strip()
@@ -369,7 +366,6 @@ async def handler(message: Message):
             index = (i * CHUNK_SIZE + j) % len(insult_list)
             chunk.append(insult_list[index])
         
-        # چسباندن با فرمت خاص
         insult_text = join_insults_custom(config['target'], chunk)
         
         if config.get("output_mode") == "voice":
