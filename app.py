@@ -18,7 +18,7 @@ AUTHORIZED_USERS = [
 
 # ===== تنظیمات پیش‌فرض =====
 CONFIG = {
-    "target": "مسعود",  # اسم پیش‌فرض تارگت
+    "target": "مسعود",
     "insults": [
         "بی شرف کون طاقار",
         "مادرجنده کثافت",
@@ -139,6 +139,13 @@ def save_config(config):
 
 config = load_config()
 
+# ===== دیکشنری برای ذخیره حالت‌های انتظار =====
+waiting_states = {
+    "waiting_for_target": False,
+    "waiting_for_sudo": False,
+    "waiting_for_insult": False
+}
+
 def convert_persian_to_english(text):
     persian_to_english = {
         '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4',
@@ -173,10 +180,11 @@ async def panel_command(message: Message):
         await message.reply("⛔ شما دسترسی به این پنل ندارید!")
         return
     await message.reply(
-        f"🔧 **پنل مدیریت ربات**\n"
+        f"🔧 **تنظیمات ربات فاکر**\n\n"
         f"👤 تارگت فعلی: {config['target']}\n"
         f"📝 تعداد فحش‌ها: {len(config['insults'])}\n"
-        f"👥 تعداد سودوها: {len(AUTHORIZED_USERS)}",
+        f"👥 تعداد سودوها: {len(AUTHORIZED_USERS)}\n\n"
+        f"یکی از گزینه‌های زیر رو انتخاب کن:",
         reply_markup=panel_keyboard()
     )
 
@@ -195,19 +203,18 @@ async def handle_callback(callback: CallbackQuery):
             "مثال: `هینا`\n\n"
             f"تارگت فعلی: {config['target']}"
         )
+        waiting_states["waiting_for_target"] = True
         await callback.answer()
-        # تنظیم حالت برای دریافت اسم جدید
-        dp["waiting_for_target"] = True
 
     elif callback.data == "add_sudo":
         await callback.message.edit_text(
             "➕ **اضافه کردن سودو جدید**\n"
-            "لطفاً آیدی عددی سودو جدید را به این صورت وارد کنید:\n"
-            "`123456789`\n\n"
+            "لطفاً آیدی عددی سودو جدید را وارد کنید.\n"
+            "مثال: `123456789`\n\n"
             "برای پیدا کردن آیدی عددی، به @userinfobot بروید."
         )
+        waiting_states["waiting_for_sudo"] = True
         await callback.answer()
-        dp["waiting_for_sudo"] = True
 
     elif callback.data == "add_insult":
         await callback.message.edit_text(
@@ -216,8 +223,8 @@ async def handle_callback(callback: CallbackQuery):
             "مثال: `مادرکونی`\n\n"
             f"تعداد فحش‌ها: {len(config['insults'])}"
         )
+        waiting_states["waiting_for_insult"] = True
         await callback.answer()
-        dp["waiting_for_insult"] = True
 
     elif callback.data == "help":
         help_text = (
@@ -226,7 +233,7 @@ async def handle_callback(callback: CallbackQuery):
             "`/panel` - باز کردن پنل مدیریت\n\n"
             "🔹 **دستور فحش دادن:**\n"
             f"`{config['target']}ارو بگا {{عدد}}`\n"
-            "مثال: `مسعودارو بگا 5`\n\n"
+            f"مثال: `{config['target']}ارو بگا 5`\n\n"
             "🔹 **نحوه کار:**\n"
             "1️⃣ روی پیام یک کاربر ریپلای بزنید\n"
             "2️⃣ دستور فحش دادن را بنویسید\n"
@@ -247,21 +254,24 @@ async def handler(message: Message):
     text = message.text.strip() if message.text else ""
 
     # ===== پردازش تغییر تارگت =====
-    if dp.get("waiting_for_target") and user_id in AUTHORIZED_USERS:
+    if waiting_states.get("waiting_for_target") and user_id in AUTHORIZED_USERS:
         if text:
             old_target = config['target']
             config['target'] = text
             save_config(config)
-            dp["waiting_for_target"] = False
+            waiting_states["waiting_for_target"] = False
             await message.reply(
                 f"✅ تارگت با موفقیت تغییر کرد!\n"
                 f"🔄 از `{old_target}` به `{text}`\n\n"
                 f"دستور جدید: `{text}ارو بگا {{عدد}}`"
             )
             return
+        else:
+            await message.reply("❌ لطفاً یک نام معتبر وارد کنید.")
+            return
 
     # ===== پردازش اضافه کردن سودو =====
-    if dp.get("waiting_for_sudo") and user_id in AUTHORIZED_USERS:
+    if waiting_states.get("waiting_for_sudo") and user_id in AUTHORIZED_USERS:
         if text.isdigit():
             new_sudo = int(text)
             if new_sudo not in AUTHORIZED_USERS:
@@ -269,33 +279,34 @@ async def handler(message: Message):
                 await message.reply(f"✅ سودو با آیدی `{new_sudo}` با موفقیت اضافه شد!")
             else:
                 await message.reply(f"❌ این کاربر قبلاً در لیست سودوها است!")
-            dp["waiting_for_sudo"] = False
+            waiting_states["waiting_for_sudo"] = False
             return
         else:
             await message.reply("❌ لطفاً یک آیدی عددی معتبر وارد کنید (فقط اعداد).")
             return
 
     # ===== پردازش اضافه کردن فحش =====
-    if dp.get("waiting_for_insult") and user_id in AUTHORIZED_USERS:
+    if waiting_states.get("waiting_for_insult") and user_id in AUTHORIZED_USERS:
         if text:
             config['insults'].append(text)
             save_config(config)
-            dp["waiting_for_insult"] = False
-            await message.reply(f"✅ فحش `{text}` با موفقیت به لیست اضافه شد!\n"
-                               f"📝 تعداد فحش‌ها: {len(config['insults'])}")
+            waiting_states["waiting_for_insult"] = False
+            await message.reply(
+                f"✅ فحش `{text}` با موفقیت به لیست اضافه شد!\n"
+                f"📝 تعداد فحش‌ها: {len(config['insults'])}"
+            )
             return
         else:
             await message.reply("❌ لطفاً یک فحش معتبر وارد کنید.")
             return
 
-    # ===== پردازش دستور اصلی =====
+    # ===== دستور فحش دادن =====
     if user_id not in AUTHORIZED_USERS:
         return
 
     if not message.reply_to_message:
         return
 
-    # بررسی دستور "تارگتارو بگا {عدد}"
     pattern = rf'^{config["target"]}ارو بگا\s+(\d+)$'
     match = re.match(pattern, text)
     
@@ -310,7 +321,7 @@ async def handler(message: Message):
         await message.reply("❌ عدد بین ۱ تا ۱۰۰ وارد کنید.")
         return
 
-    # ===== ساخت فحش‌ها با تارگت جدید =====
+    # ===== ارسال فحش‌ها =====
     CHUNK_SIZE = 4
     
     for i in range(number):
