@@ -1,4 +1,4 @@
 aiogram
 flask
-edge-tts
-hazm
+google-generativeai
+gtts
