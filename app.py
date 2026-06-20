@@ -7,11 +7,11 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BufferedInputFile
 from aiogram.filters import Command
 from flask import Flask
-from gtts import gTTS
+import edge_tts
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
-# ===== لیست سودوها (آیدی عددی) =====
+# ===== لیست سودوها =====
 AUTHORIZED_USERS = [
     8273038319,
     7667099146,
@@ -21,10 +21,10 @@ AUTHORIZED_USERS = [
 # ===== تنظیمات پیش‌فرض =====
 CONFIG = {
     "target": "مسعود",
-    "output_mode": "text",  # "text" یا "voice"
+    "output_mode": "text",
 }
 
-# ===== فحش‌های متنی =====
+# ===== فحش‌های متنی (بدون حرکات) =====
 TEXT_INSULTS = [
     "بی شرف کون طاقار",
     "مادرجنده کثافت",
@@ -128,7 +128,7 @@ TEXT_INSULTS = [
     "شیطان پدرکونی",
 ]
 
-# ===== فحش‌های صوتی (با حرکات) =====
+# ===== فحش‌های صوتی (با حرکات، برای ویس) =====
 VOICE_INSULTS = [
     "بی‌شَرَف کون طاقار",
     "مادَر جِنده کَثافَت",
@@ -248,7 +248,7 @@ def save_config(config):
 
 config = load_config()
 
-# ===== دیکشنری برای ذخیره حالت‌های انتظار =====
+# ===== حالت‌های انتظار =====
 waiting_states = {
     "waiting_for_target": False,
     "waiting_for_sudo": False,
@@ -264,19 +264,18 @@ def convert_persian_to_english(text):
         text = text.replace(persian, english)
     return text
 
-# ===== تبدیل متن به ویس =====
+# ===== تبدیل متن به ویس با Edge TTS (صدای مردانه) =====
 async def send_voice_insult(reply_to_message, insult_text):
     try:
-        tts = gTTS(text=insult_text, lang="ar", slow=False)
-        audio_bytes = io.BytesIO()
-        tts.write_to_fp(audio_bytes)
-        audio_bytes.seek(0)
+        voice = "fa-IR-FaridNeural"  # صدای مردانه
+        communicate = edge_tts.Communicate(text=insult_text, voice=voice)
+        audio_data = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_data += chunk["data"]
         
         await reply_to_message.reply_voice(
-            voice=BufferedInputFile(
-                audio_bytes.read(), 
-                filename="insult.ogg"
-            )
+            voice=BufferedInputFile(audio_data, filename="insult.mp3")
         )
     except Exception as e:
         await reply_to_message.reply(f"❌ خطا در ساخت ویس: {e}")
@@ -400,7 +399,7 @@ async def handle_callback(callback: CallbackQuery):
         await callback.message.edit_text(help_text)
         await callback.answer()
 
-# ===== هندلر پیام‌های متنی (اصلاح‌شده) =====
+# ===== هندلر پیام‌های متنی (فقط به دستورات مشخص پاسخ میده) =====
 @dp.message()
 async def handler(message: Message):
     user_id = message.from_user.id
@@ -450,14 +449,13 @@ async def handler(message: Message):
         waiting_states["waiting_for_sudo"] = False
         return
 
-    # ===== ۴. دستور فحش دادن =====
-    # چک کردن سودو بودن کاربر
+    # ===== ۴. دستور فحش دادن (فقط با ریپلای) =====
+    # چک کردن سودو بودن
     if user_id not in AUTHORIZED_USERS:
         return
 
     # چک کردن ریپلای
     if not message.reply_to_message:
-        await message.reply("⚠️ روی یک پیام ریپلای بزنید و دستور را بنویسید.")
         return
 
     # چک کردن دستور فحش دادن
@@ -471,13 +469,11 @@ async def handler(message: Message):
     number_text_english = convert_persian_to_english(number_text)
     
     if not number_text_english.isdigit():
-        await message.reply("❌ لطفاً یک عدد معتبر وارد کنید.")
         return
         
     number = int(number_text_english)
 
     if not (1 <= number <= 100):
-        await message.reply("❌ عدد بین ۱ تا ۱۰۰ وارد کنید.")
         return
 
     # ===== ارسال فحش‌ها =====
