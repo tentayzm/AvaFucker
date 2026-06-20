@@ -13,7 +13,6 @@ AUTHORIZED_USERS = [
     8811402550,
 ]
 
-# ===== لیست فحش‌های سنگین (با نام مدوسا) =====
 INSULTS = [
     "مدوسا مادرجنده کثافت",
     "مدوسا خارکونی پدرسگ",
@@ -134,16 +133,13 @@ async def handler(message: Message):
 
     # چک کردن دسترسی (فقط سودوها)
     if user_id not in AUTHORIZED_USERS:
-        await message.reply("⛔ شما دسترسی به این ربات ندارید!")
         return
 
     # چک کردن ریپلای
     if not message.reply_to_message:
-        await message.reply("⚠️ روی یک پیام ریپلای بزنید و عبارت 'مدوسارو بگا {عدد}' را بفرستید.")
         return
 
     if not message.text:
-        await message.reply("❌ لطفاً یک عدد وارد کنید.")
         return
 
     # ===== بررسی عبارت "مدوسارو بگا {عدد}" =====
@@ -154,8 +150,7 @@ async def handler(message: Message):
     match = re.match(pattern, text)
     
     if not match:
-        await message.reply("❌ فرمت درست نیست! باید به این شکل باشه:\nمدوسارو بگا {عدد}\nمثال: مدوسارو بگا 5")
-        return
+        return  # ← فقط به دستور دقیق پاسخ میده، نه به هر ریپلایی
     
     # استخراج عدد از متن
     number_text = match.group(1)
@@ -177,7 +172,7 @@ async def handler(message: Message):
         
         insult_text = " ".join(chunk)
         await message.reply_to_message.reply(insult_text)
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(2)  # تأخیر ۲ ثانیه برای جلوگیری از Flood
 
 app = Flask(__name__)
 
