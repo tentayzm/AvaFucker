@@ -284,7 +284,7 @@ async def send_voice_insult(reply_to_message, insult_text):
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ===== کیبورد شیشه‌ای پنل =====
+# ===== کیبورد شیشه‌ای پنل (با دکمه‌ی جدید "سازنده") =====
 def panel_keyboard():
     mode_text = "🔊 ویس" if config.get("output_mode") == "voice" else "📝 متن"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
@@ -297,7 +297,8 @@ def panel_keyboard():
             InlineKeyboardButton(text=f"🎙️ حالت خروجی: {mode_text}", callback_data="output_mode")
         ],
         [
-            InlineKeyboardButton(text="📖 راهنما", callback_data="help")
+            InlineKeyboardButton(text="📖 راهنما", callback_data="help"),
+            InlineKeyboardButton(text="👨‍💻 سازنده", url="https://t.me/TaakaaOrg")  # ← دکمه‌ی جدید
         ]
     ])
     return keyboard
