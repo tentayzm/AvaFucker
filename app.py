@@ -1,13 +1,12 @@
 import asyncio
 import os
 import re
-import random
+import io
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery, BufferedInputFile
 from aiogram.filters import Command
 from flask import Flask
 from gtts import gTTS
-import io
 
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
 
@@ -18,8 +17,14 @@ AUTHORIZED_USERS = [
     8811402550,
 ]
 
-# ===== لیست فحش‌ها =====
-INSULTS = [
+# ===== تنظیمات پیش‌فرض =====
+CONFIG = {
+    "target": "مسعود",
+    "output_mode": "text",  # "text" یا "voice"
+}
+
+# ===== فحش‌های متنی (بدون اعراب) =====
+TEXT_INSULTS = [
     "مادرجنده",
     "بی‌ناموس",
     "کسمادر",
@@ -71,26 +76,91 @@ INSULTS = [
     "کس",
 ]
 
+# ===== فحش‌های صوتی (با اعراب دستی برای تلفظ درست) =====
+VOICE_INSULTS = [
+    "مادَرجِنده",      # مادرجنده
+    "بی‌ناموس",        # بیناموس
+    "کُسمادَر",        # کسمادر
+    "کُنی",            # کونی
+    "پِدَر سَگ",        # پدرسگ
+    "حَرام‌زادِه",      # حرومزاده
+    "خار کُنی",        # خارکونی
+    "بی‌شَرَف",        # بیشرف
+    "بی‌غیرَت",        # بی‌غیرت
+    "کَثافَت",         # کثافت
+    "هَرزِه",          # هرزه
+    "لااَبالی",        # لاابالی
+    "وَلَنگار",        # ولنگار
+    "بی‌بَندوبار",     # بی‌بندوبار
+    "بی‌سَروپا",       # بی‌سروپا
+    "بی‌ریشِه",        # بی‌ریشه
+    "بی‌اَصل",         # بی‌اصل
+    "بی‌نِسب",         # بی‌نسب
+    "بی‌تَبار",        # بی‌تبار
+    "بی‌خانوادِه",     # بی‌خانواده
+    "بی‌پِدَر",        # بی‌پدر
+    "بی‌مادَر",        # بی‌مادر
+    "یَتیم",           # یتیم
+    "طَرد شُدِه",      # طردشده
+    "رانِه شُدِه",      # رانده‌شده
+    "لَعَنتی",         # لعنتی
+    "مَلعون",          # ملعون
+    "گُناهکار",        # گناهکار
+    "مُجرِم",          # مجرم
+    "خَبیث",           # خبیث
+    "پَلید",           # پلید
+    "ناپاک",           # ناپاک
+    "چِرکین",          # چرکین
+    "کَثیف",           # کثیف
+    "مُتَعَفِن",        # متعفن
+    "گَندیدِه",        # گندیده
+    "مُردِه",          # مرده
+    "زامبی",           # زامبی
+    "اَهریمَن",        # اهریمن
+    "شیطان",           # شیطان
+    "کیر و کُس",       # کیر و کس
+    "دالگَت",          # دالگت
+    "زیرِمِه",         # زیرمه
+    "گاو صِفَت",       # گاوصفت
+    "نَنِه جِنده",     # ننه‌جنده
+    "خایِه‌مال",       # خایه‌مال
+    "جِنده",           # جنده
+    "کون",             # کون
+    "کُس",             # کس
+]
+
 # ===== تابع چسباندن با فرمت خاص =====
 def join_insults_custom(target, insult_list):
     """
     چسباندن فحش‌ها با فرمت:
-    - اولین فحش: {تارگت}ِ
-    - فحش‌های وسط: {فحش}ِ
-    - آخرین فحش: {فحش} (بدون چیزی)
-    - اگه به "ا" ختم شد: {فحش}ی
+    - فحش اول: {تارگت}ِ (اگه به ا ختم شد: {تارگت}ی)
+    - فحش دوم: {فحش}ی (اگه به ا ختم شد: {فحش}ی)
+    - فحش سوم: {فحش}ِ
+    - فحش چهارم: {فحش} (بدون چیزی)
+    مثال: مسعود + مادرجنده + بیناموس + کسمادر + کونی
+    → مسعودِ مادرجنده‌ی بیناموسِ کسمادرِ کونی
     """
     if not insult_list:
         return target
     
+    # حروفی که به "ی" نیاز دارن
     vowels = "اآ"
     
-    result = target + "ِ "
+    result = ""
     
+    # ===== تارگت =====
+    if target and target[-1] in vowels:
+        result += target + "ی "
+    else:
+        result += target + "ِ "
+    
+    # ===== فحش‌ها =====
     for i, insult in enumerate(insult_list):
         if i == len(insult_list) - 1:
+            # آخرین فحش: بدون چیزی
             result += insult
         else:
+            # فحش‌های وسط
             if insult and insult[-1] in vowels:
                 result += insult + "ی "
             else:
@@ -107,7 +177,7 @@ async def send_voice_insult(reply_to_message, insult_text):
         audio_bytes.seek(0)
         
         await reply_to_message.reply_voice(
-            voice=types.BufferedInputFile(
+            voice=BufferedInputFile(
                 audio_bytes.read(), 
                 filename="insult.ogg"
             )
@@ -115,7 +185,7 @@ async def send_voice_insult(reply_to_message, insult_text):
     except Exception as e:
         await reply_to_message.reply(f"❌ خطا در ساخت ویس: {e}")
 
-# ===== تبدیل عدد فارسی به انگلیسی =====
+# ===== تبدیل اعداد فارسی به انگلیسی =====
 def convert_persian_to_english(text):
     persian_to_english = {
         '۰': '0', '۱': '1', '۲': '2', '۳': '3', '۴': '4',
@@ -130,10 +200,15 @@ dp = Dispatcher()
 
 # ===== کیبورد شیشه‌ای پنل =====
 def panel_keyboard():
+    mode_text = "🔊 ویس" if CONFIG.get("output_mode") == "voice" else "📝 متن"
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="🎯 تغییر تارگت", callback_data="change_target"),
-            InlineKeyboardButton(text="➕ اضافه کردن فحش", callback_data="add_insult")
+            InlineKeyboardButton(text="➕ اضافه کردن سودو", callback_data="add_sudo")
+        ],
+        [
+            InlineKeyboardButton(text="➕ اضافه کردن فحش", callback_data="add_insult"),
+            InlineKeyboardButton(text=f"🎙️ حالت خروجی: {mode_text}", callback_data="output_mode")
         ],
         [
             InlineKeyboardButton(text="📖 راهنما", callback_data="help"),
@@ -149,18 +224,11 @@ async def panel_command(message: Message):
     if user_id not in AUTHORIZED_USERS:
         await message.reply("⛔ شما دسترسی به این پنل ندارید!")
         return
-    
-    # بارگذاری تارگت از فایل
-    try:
-        with open("target.txt", "r") as f:
-            target = f.read().strip()
-    except:
-        target = "مسعود"
-    
     await message.reply(
-        f"🔧 **تنظیمات ربات فحاش**\n\n"
-        f"👤 تارگت فعلی: {target}\n"
-        f"📝 تعداد فحش‌ها: {len(INSULTS)}\n"
+        f"🔧 **تنظیمات ربات**\n\n"
+        f"👤 تارگت فعلی: {CONFIG['target']}\n"
+        f"🎙️ حالت خروجی: {'ویس' if CONFIG.get('output_mode') == 'voice' else 'متن'}\n"
+        f"📝 تعداد فحش‌ها: {len(TEXT_INSULTS)}\n"
         f"👥 تعداد سودوها: {len(AUTHORIZED_USERS)}\n\n"
         f"یکی از گزینه‌های زیر رو انتخاب کن:",
         reply_markup=panel_keyboard()
@@ -168,7 +236,7 @@ async def panel_command(message: Message):
 
 # ===== پردازش دکمه‌ها =====
 @dp.callback_query()
-async def handle_callback(callback: types.CallbackQuery):
+async def handle_callback(callback: CallbackQuery):
     user_id = callback.from_user.id
     if user_id not in AUTHORIZED_USERS:
         await callback.answer("⛔ شما دسترسی ندارید!", show_alert=True)
@@ -178,22 +246,46 @@ async def handle_callback(callback: types.CallbackQuery):
         await callback.message.edit_text(
             "🎯 **تغییر تارگت**\n"
             "لطفاً نام شخص جدید را وارد کنید.\n"
-            "مثال: `هینا`\n\n"
-            "تارگت فعلی رو می‌تونی با دستور `/panel` ببینی."
+            f"تارگت فعلی: {CONFIG['target']}"
         )
-        # تنظیم حالت انتظار برای دریافت نام جدید
-        dp["waiting_for_target"] = True
+        waiting_for_target = True
+        await callback.answer()
+
+    elif callback.data == "add_sudo":
+        await callback.message.edit_text(
+            "➕ **اضافه کردن سودو جدید**\n"
+            "لطفاً آیدی عددی سودو جدید را وارد کنید.\n"
+            "مثال: `123456789`"
+        )
+        waiting_for_sudo = True
         await callback.answer()
 
     elif callback.data == "add_insult":
         await callback.message.edit_text(
             "➕ **اضافه کردن فحش جدید**\n"
             "لطفاً فحش جدید را وارد کنید:\n"
-            "مثال: `مادرکونی`\n\n"
-            f"تعداد فحش‌ها: {len(INSULTS)}"
+            "مثال: `مادرکونی`"
         )
-        dp["waiting_for_insult"] = True
+        waiting_for_insult = True
         await callback.answer()
+
+    elif callback.data == "output_mode":
+        # تغییر حالت خروجی
+        if CONFIG.get("output_mode") == "text":
+            CONFIG["output_mode"] = "voice"
+        else:
+            CONFIG["output_mode"] = "text"
+        
+        await callback.message.edit_text(
+            f"🔧 **تنظیمات ربات**\n\n"
+            f"👤 تارگت فعلی: {CONFIG['target']}\n"
+            f"🎙️ حالت خروجی: {'ویس' if CONFIG.get('output_mode') == 'voice' else 'متن'}\n"
+            f"📝 تعداد فحش‌ها: {len(TEXT_INSULTS)}\n"
+            f"👥 تعداد سودوها: {len(AUTHORIZED_USERS)}\n\n"
+            f"✅ حالت خروجی به **{'ویس' if CONFIG.get('output_mode') == 'voice' else 'متن'}** تغییر کرد!",
+            reply_markup=panel_keyboard()
+        )
+        await callback.answer(f"حالت به {'ویس' if CONFIG.get('output_mode') == 'voice' else 'متن'} تغییر کرد!")
 
     elif callback.data == "help":
         help_text = (
@@ -201,98 +293,120 @@ async def handle_callback(callback: types.CallbackQuery):
             "🔹 **دستورات اصلی:**\n"
             "`/panel` - باز کردن پنل مدیریت\n\n"
             "🔹 **دستور فحش دادن:**\n"
-            "روی پیام یک کاربر ریپلای بزنید و عدد را بنویسید.\n"
-            "مثال: `5`\n\n"
+            f"`{CONFIG['target']} رو بگا {{عدد}}`\n"
+            f"مثال: `{CONFIG['target']} رو بگا 5`\n\n"
             "🔹 **نحوه کار:**\n"
             "1️⃣ روی پیام یک کاربر ریپلای بزنید\n"
-            "2️⃣ عدد مورد نظر را بنویسید (۱ تا ۱۰۰)\n"
+            "2️⃣ دستور فحش دادن را بنویسید\n"
             "3️⃣ ربات به آن کاربر فحش می‌دهد\n\n"
+            "🔹 **حالت خروجی:**\n"
+            "• **متن**: فحش‌ها به صورت پیام متنی ارسال می‌شوند\n"
+            "• **ویس**: فحش‌ها به صورت ویس (صوت) ارسال می‌شوند\n\n"
             "🔹 **مدیریت:**\n"
             "• تغییر تارگت: نام شخص مورد نظر را تغییر دهید\n"
+            "• اضافه کردن سودو: کاربران جدید را اضافه کنید\n"
             "• اضافه کردن فحش: فحش‌های جدید به لیست اضافه می‌شوند\n\n"
             "🔹 **تعداد فحش‌ها:** ۱ تا ۱۰۰"
         )
         await callback.message.edit_text(help_text)
         await callback.answer()
 
+# ===== متغیرهای حالت انتظار =====
+waiting_for_target = False
+waiting_for_sudo = False
+waiting_for_insult = False
+
 # ===== هندلر پیام‌های متنی =====
 @dp.message()
 async def handler(message: Message):
+    global waiting_for_target, waiting_for_sudo, waiting_for_insult
     user_id = message.from_user.id
     text = message.text.strip() if message.text else ""
 
     # ===== پردازش تغییر تارگت =====
-    if dp.get("waiting_for_target") and user_id in AUTHORIZED_USERS:
+    if waiting_for_target and user_id in AUTHORIZED_USERS:
         if text:
-            # ذخیره تارگت جدید در فایل
-            with open("target.txt", "w") as f:
-                f.write(text)
-            dp["waiting_for_target"] = False
+            old_target = CONFIG['target']
+            CONFIG['target'] = text
+            waiting_for_target = False
             await message.reply(
                 f"✅ تارگت با موفقیت تغییر کرد!\n"
-                f"🔄 به `{text}`\n\n"
-                f"از این به بعد فحش‌ها به {text} می‌رسه!"
+                f"🔄 از `{old_target}` به `{text}`\n\n"
+                f"دستور جدید: `{text} رو بگا {{عدد}}`"
             )
-            return
         else:
             await message.reply("❌ لطفاً یک نام معتبر وارد کنید.")
+        return
+
+    # ===== پردازش اضافه کردن سودو =====
+    if waiting_for_sudo and user_id in AUTHORIZED_USERS:
+        if text.isdigit():
+            new_sudo = int(text)
+            if new_sudo not in AUTHORIZED_USERS:
+                AUTHORIZED_USERS.append(new_sudo)
+                await message.reply(f"✅ سودو با آیدی `{new_sudo}` با موفقیت اضافه شد!")
+            else:
+                await message.reply(f"❌ این کاربر قبلاً در لیست سودوها است!")
+            waiting_for_sudo = False
+            return
+        else:
+            await message.reply("❌ لطفاً یک آیدی عددی معتبر وارد کنید (فقط اعداد).")
             return
 
     # ===== پردازش اضافه کردن فحش =====
-    if dp.get("waiting_for_insult") and user_id in AUTHORIZED_USERS:
+    if waiting_for_insult and user_id in AUTHORIZED_USERS:
         if text:
-            INSULTS.append(text)
-            dp["waiting_for_insult"] = False
+            TEXT_INSULTS.append(text)
+            VOICE_INSULTS.append(text)
+            waiting_for_insult = False
             await message.reply(
                 f"✅ فحش `{text}` با موفقیت به لیست اضافه شد!\n"
-                f"📝 تعداد فحش‌ها: {len(INSULTS)}"
+                f"📝 تعداد فحش‌ها: {len(TEXT_INSULTS)}"
             )
-            return
         else:
             await message.reply("❌ لطفاً یک فحش معتبر وارد کنید.")
-            return
+        return
 
-    # ===== دستور فحش دادن (فقط با ریپلای) =====
+    # ===== دستور فحش دادن =====
     if user_id not in AUTHORIZED_USERS:
         return
 
     if not message.reply_to_message:
+        await message.reply("⚠️ روی یک پیام ریپلای بزنید و دستور را بنویسید.")
         return
 
-    # چک کردن عدد بودن پیام
-    if not text.isdigit():
+    pattern = rf'^{CONFIG["target"]} رو بگا\s+(\d+)$'
+    match = re.match(pattern, text)
+    
+    if not match:
         return
 
-    number_text = convert_persian_to_english(text)
-    number = int(number_text)
+    number_text = match.group(1)
+    number_text_english = convert_persian_to_english(number_text)
+    number = int(number_text_english)
 
     if not (1 <= number <= 100):
         await message.reply("❌ عدد بین ۱ تا ۱۰۰ وارد کنید.")
         return
 
-    # ===== بارگذاری تارگت از فایل =====
-    try:
-        with open("target.txt", "r") as f:
-            target = f.read().strip()
-    except:
-        target = "مسعود"
-
-    # ===== ارسال فحش‌ها با چسباندن =====
+    # ===== ارسال فحش‌ها =====
     CHUNK_SIZE = 4
+    insult_list = VOICE_INSULTS if CONFIG.get("output_mode") == "voice" else TEXT_INSULTS
     
     for i in range(number):
-        # انتخاب ۴ فحش
         chunk = []
         for j in range(CHUNK_SIZE):
-            index = (i * CHUNK_SIZE + j) % len(INSULTS)
-            chunk.append(INSULTS[index])
+            index = (i * CHUNK_SIZE + j) % len(insult_list)
+            chunk.append(insult_list[index])
         
-        # چسباندن فحش‌ها
-        insult_text = join_insults_custom(target, chunk)
+        insult_text = join_insults_custom(CONFIG['target'], chunk)
         
-        # انتخاب خروجی (ویس یا متن)
-        await message.reply_to_message.reply(insult_text)
-        await asyncio.sleep(0.5)
+        if CONFIG.get("output_mode") == "voice":
+            await send_voice_insult(message.reply_to_message, insult_text)
+        else:
+            await message.reply_to_message.reply(insult_text)
+        
+        await asyncio.sleep(2)
 
 # ===== Flask =====
 app = Flask(__name__)
@@ -309,5 +423,5 @@ if __name__ == "__main__":
     import threading
     port = int(os.environ.get("PORT", 5000))
     threading.Thread(target=lambda: app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)).start()
-    print("🤖 ربات فحاش روشن شد!")
+    print("🤖 ربات در حال اجراست...")
     asyncio.run(main())
