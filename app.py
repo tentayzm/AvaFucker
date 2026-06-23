@@ -1,9 +1,9 @@
 import asyncio
 import os
 import re
-import random
+import json
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.filters import Command
 from flask import Flask
 
@@ -15,6 +15,11 @@ AUTHORIZED_USERS = [
     7667099146,
     8811402550,
 ]
+
+# ===== تنظیمات پیش‌فرض =====
+CONFIG = {
+    "target": "مسعود",
+}
 
 # ===== لیست فحش‌های سنگین =====
 INSULTS = [
@@ -39,6 +44,23 @@ INSULTS = [
     "کونی بی‌حیا",
     "مادرجنده‌زاده",
 ]
+
+# ===== ذخیره و بارگذاری تنظیمات =====
+CONFIG_FILE = "config.json"
+
+def load_config():
+    try:
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    except:
+        return CONFIG
+
+def save_config(config):
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=4)
+
+config = load_config()
+waiting_for_target = False
 
 # ===== تابع تبدیل اعداد فارسی به انگلیسی =====
 def convert_persian_to_english(text):
@@ -67,7 +89,20 @@ def join_insults(target, insult_list):
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# ===== دستور /panel (فقط سودوها) =====
+# ===== کیبورد شیشه‌ای پنل =====
+def panel_keyboard():
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="🎯 تغییر تارگت", callback_data="change_target"),
+            InlineKeyboardButton(text="📖 راهنما", callback_data="help")
+        ],
+        [
+            InlineKeyboardButton(text="👨‍💻 سازنده", url="https://t.me/TaakaaOrg")
+        ]
+    ])
+    return keyboard
+
+# ===== دستور /panel =====
 @dp.message(Command("panel"))
 async def panel_command(message: Message):
     user_id = message.from_user.id
@@ -76,22 +111,75 @@ async def panel_command(message: Message):
         return
     await message.reply(
         f"🔧 **تنظیمات ربات فاکر**\n\n"
-        f"👤 تعداد سودوها: {len(AUTHORIZED_USERS)}\n"
+        f"👤 تارگت فعلی: **{config['target']}**\n"
+        f"👥 تعداد سودوها: {len(AUTHORIZED_USERS)}\n"
         f"📝 تعداد فحش‌ها: {len(INSULTS)}\n\n"
         f"⚡ **دستور فحش دادن:**\n"
-        f"`{target} رو بگا {{عدد}}`\n"
-        f"مثال: `مسعود رو بگا 5`\n\n"
+        f"`{config['target']} رو بگا {{عدد}}`\n"
+        f"مثال: `{config['target']} رو بگا 5`\n\n"
         f"🔹 روی پیام ریپلای بزنید و عدد بنویسید",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="👨‍💻 سازنده", url="https://t.me/TaakaaOrg")]
-        ])
+        reply_markup=panel_keyboard()
     )
+
+# ===== پردازش دکمه‌ها =====
+@dp.callback_query()
+async def handle_callback(callback: CallbackQuery):
+    user_id = callback.from_user.id
+    if user_id not in AUTHORIZED_USERS:
+        await callback.answer("⛔ شما دسترسی ندارید!", show_alert=True)
+        return
+
+    if callback.data == "change_target":
+        await callback.message.edit_text(
+            "🎯 **تغییر تارگت**\n"
+            "لطفاً نام شخص جدید را وارد کنید.\n"
+            f"تارگت فعلی: **{config['target']}**\n\n"
+            "مثال: `هینا`"
+        )
+        global waiting_for_target
+        waiting_for_target = True
+        await callback.answer()
+
+    elif callback.data == "help":
+        help_text = (
+            "📖 **راهنمای ربات**\n\n"
+            "🔹 **دستور فحش دادن:**\n"
+            f"`{config['target']} رو بگا {{عدد}}`\n"
+            f"مثال: `{config['target']} رو بگا 5`\n\n"
+            "🔹 **نحوه کار:**\n"
+            "1️⃣ روی پیام یک کاربر ریپلای بزنید\n"
+            "2️⃣ دستور فحش دادن را بنویسید\n"
+            "3️⃣ ربات به آن کاربر فحش می‌دهد\n\n"
+            "🔹 **مدیریت:**\n"
+            "• تغییر تارگت: نام شخص مورد نظر را تغییر دهید\n\n"
+            "🔹 **تعداد فحش‌ها:** ۱ تا ۱۰۰"
+        )
+        await callback.message.edit_text(help_text)
+        await callback.answer()
 
 # ===== هندلر پیام‌ها =====
 @dp.message()
 async def handler(message: Message):
+    global waiting_for_target
     user_id = message.from_user.id
     text = message.text.strip() if message.text else ""
+
+    # ===== پردازش تغییر تارگت =====
+    if waiting_for_target and user_id in AUTHORIZED_USERS:
+        if text:
+            old_target = config['target']
+            config['target'] = text
+            save_config(config)
+            waiting_for_target = False
+            await message.reply(
+                f"✅ تارگت با موفقیت تغییر کرد!\n"
+                f"🔄 از `{old_target}` به `{text}`\n\n"
+                f"دستور جدید: `{text} رو بگا {{عدد}}`"
+            )
+            return
+        else:
+            await message.reply("❌ لطفاً یک نام معتبر وارد کنید.")
+            return
 
     # ===== چک کردن سودو بودن =====
     if user_id not in AUTHORIZED_USERS:
@@ -102,14 +190,13 @@ async def handler(message: Message):
         return
 
     # ===== بررسی دستور فحش دادن =====
-    pattern = r'^(.*?) رو بگا\s+(\d+)$'
+    pattern = rf'^{config["target"]} رو بگا\s+(\d+)$'
     match = re.match(pattern, text)
     
     if not match:
         return
 
-    target = match.group(1).strip()
-    number_text = match.group(2)
+    number_text = match.group(1)
     number_text_english = convert_persian_to_english(number_text)
     
     if not number_text_english.isdigit():
@@ -130,11 +217,11 @@ async def handler(message: Message):
             index = (i * CHUNK_SIZE + j) % len(INSULTS)
             chunk.append(INSULTS[index])
         
-        insult_text = join_insults(target, chunk)
+        insult_text = join_insults(config['target'], chunk)
         await message.reply_to_message.reply(insult_text)
-        await asyncio.sleep(1.5)  # تاخیر ۱.۵ ثانیه برای جلوگیری از محدودیت
+        await asyncio.sleep(1.5)
 
-# ===== Flask (برای نگه‌داشتن ربات روشن) =====
+# ===== Flask =====
 app = Flask(__name__)
 
 @app.route('/')
